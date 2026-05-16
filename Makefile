@@ -5,10 +5,10 @@ install:
 	pip install pygame
  
 run:
-	python3 Flaying.py $(FILE)
+	python3 main.py $(FILE)
  
 debug:
-	python3 -m pdb Flaying.py $(FILE)
+	python3 -m pdb main.py $(FILE)
  
 lint:
 	flake8 .
