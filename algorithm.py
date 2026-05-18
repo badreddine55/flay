@@ -1,3 +1,5 @@
+"""Drone pathfinding and turn-based simulation logic."""
+
 from file_parser import ZoneType
 from collections import defaultdict
 from typing import Any
@@ -5,6 +7,8 @@ import heapq
 
 
 class Drone:
+    """A single drone with an id, starting position, and computed path."""
+
     def __init__(self, drone_id: str, position: str) -> None:
         self.id = drone_id
         self.position = position
@@ -12,6 +16,12 @@ class Drone:
 
 
 class Dijkstra:
+    """Capacity-aware Dijkstra pathfinder over the zone graph.
+
+    Reserves hub and link slots per drone so later drones route around
+    congestion automatically.
+    """
+
     def __init__(self, graph: Any, zones: Any) -> None:
         self.graph = graph
         self.zones = zones
@@ -25,6 +35,10 @@ class Dijkstra:
         start: str,
         end: str,
     ) -> list[Any]:
+        """Walk prev back from end to start and return the ordered path.
+
+        Returns an empty list if end is unreachable.
+        """
         path = []
         node = end
 
@@ -49,6 +63,11 @@ class Dijkstra:
     def find_path(
         self, drone: Drone, start: str, end: str, current_turn: int
     ) -> list[Any]:
+        """Return the cheapest available path from start to end.
+
+        Skips BLOCKED zones, favours PRIORITY zones, and allows waiting
+        in place when all neighbours are full.
+        """
         heap: list[Any] = []
         dist = {zone: float('inf') for zone in self.graph._data}
         dist[start] = 0
@@ -78,7 +97,6 @@ class Dijkstra:
                 if neighbor.zone_type == ZoneType.BLOCKED:
                     continue
 
-                # priority zones cost half → dijkstra naturally prefers them
                 is_priority = neighbor.zone_type == ZoneType.PRIORITY
                 cost_modifier = 0.5 if is_priority else 1
 
@@ -90,8 +108,6 @@ class Dijkstra:
                     turn,
                 )
 
-                # how many drones already booked this zone and link
-                # at this turn
                 reserved_zone = self.hub_cache.get(zone_key, 0)
                 reserved_link = self.link_cache.get(link_key, 0)
 
@@ -101,7 +117,6 @@ class Dijkstra:
                 if reserved_zone >= neighbor.max_drones:
                     continue
 
-                # found a better path to this neighbor → update and push
                 new_cost = cost + (entry.cost * cost_modifier)
 
                 if new_cost < dist[neighbor.name]:
@@ -114,10 +129,6 @@ class Dijkstra:
                         (new_cost, arrival_turn, neighbor.name),
                     )
 
-            # ── WAIT OPTION ────────────────────────────────────────────
-            # after trying all neighbors, always offer "stay here one
-            # more turn"
-            # this is the fallback if every neighbor was full or blocked
             wait_turn = turn + 1
             current_zone = self.zones[node]
             reserved_wait = self.hub_cache.get((node, wait_turn), 0)
@@ -136,12 +147,9 @@ class Dijkstra:
             zone_a, _, state_a = path[i]
             _, turn_b, state_b = path[i + 1]
 
-            # transit markers are not real zones → skip them
             if state_a == "transit" or state_b == "transit":
                 continue
 
-            # departure turn = when the drone LEFT zone_a
-            # (one turn before arriving at zone_b)
             departure_turn = turn_b - 1
             zone_b = path[i + 1][0]
 
@@ -158,11 +166,17 @@ class Dijkstra:
 
 
 class Simulation:
+    """Executes the simulation and prints the turn-by-turn movement log."""
+
     def __init__(self, graph: Any, drones: list[Drone]) -> None:
         self.graph = graph
         self.drones = drones
 
     def run(self) -> None:
+        """Print each turn's drone movements to stdout.
+
+        Each line is formatted as: D1-ZoneA D2-ZoneB ...
+        """
         movements: dict[Any, list[Any]] = defaultdict(list)
 
         for drone in self.drones:

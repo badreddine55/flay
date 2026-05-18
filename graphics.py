@@ -12,40 +12,25 @@ class Drone:
 
     def __init__(self) -> None:
         self.id: int = 0
-
-        # Current screen position (pixels)
         self.x: float = 0.0
         self.y: float = 0.0
-
-        # Endpoints of the current interpolated move
         self.last_x: float = 0.0
         self.last_y: float = 0.0
         self.next_x: float = 0.0
         self.next_y: float = 0.0
-
-        # path = list of (hub_id, turn) steps
-        # path_index = index of the *next* step we are heading toward
         self.path: list[tuple[str, int]] = []
         self.path_index: int = 1
         self.is_done: bool = False
-
-        # Hub positions shared from Game (hub_id -> world coords)
         self.hubs_position: dict[str, tuple[float, float]] = {}
-
-        # Small random offset so drones don't overlap when stacked
         self.wobble_x: float = float(random.randint(-10, 10))
         self.wobble_y: float = float(random.randint(-10, 10))
-
-        # Map transform injected by Game after compute_scale()
         self.map_scale: float = 1.0
         self.offset_x: float = 0.0
         self.offset_y: float = 0.0
         self.min_x: float = 0.0
         self.min_y: float = 0.0
 
-    def world_to_screen(
-        self, wx: float, wy: float
-    ) -> tuple[float, float]:
+    def world_to_screen(self, wx: float, wy: float) -> tuple[float, float]:
         """Convert world coordinates to screen pixels."""
         sx = (wx - self.min_x) * self.map_scale + self.offset_x
         sy = (wy - self.min_y) * self.map_scale + self.offset_y
@@ -54,15 +39,13 @@ class Drone:
     def get_screen_pos_at(self, index: int) -> tuple[float, float]:
         """Return the screen position for path step at index.
 
-        If the hub_id is not a real hub it is a transit waypoint; in that
-        case we return the midpoint between the previous and next real hubs.
+        For transit waypoints, returns the midpoint of the neighbouring hubs.
         """
         hub_id = self.path[index][0]
 
         if hub_id in self.hubs_position:
             return self.world_to_screen(*self.hubs_position[hub_id])
 
-        # Transit waypoint: average the neighbours
         prev_hub_id = self.path[index - 1][0]
         next_hub_id = self.path[index + 1][0]
         px, py = self.world_to_screen(*self.hubs_position[prev_hub_id])
@@ -70,8 +53,7 @@ class Drone:
         return (px + nx) / 2.0, (py + ny) / 2.0
 
     def _is_waiting_between_turns(self, current_turn: int) -> bool:
-        """Return True when the drone has
-        arrived but next move is not due yet."""
+        """Return True when drone has arrived but the next move is not due."""
         if self.path_index >= len(self.path):
             return False
         due_turn = self.path[self.path_index][1]
@@ -79,15 +61,13 @@ class Drone:
         return prev_turn < current_turn < due_turn
 
     def update(self, current_turn: int, frame_count: int) -> None:
-        """Advance the drone animation by one frame."""
+        """Advance the drone animation by one frame using smoothstep easing."""
         if self.is_done:
             return
 
         frames_per_turn: int = 60
         t = frame_count / frames_per_turn
         t = max(0.0, min(1.0, t))
-
-        # Smoothstep easing: slow at start and end, fast in the middle
         smooth_t = t * t * (3.0 - 2.0 * t)
 
         if frame_count == 59 and self.path_index >= len(self.path):
@@ -114,14 +94,13 @@ class Drone:
 
 
 class Game:
-    """Main simulation: loads data, draws the map and drones, runs the loop."""
+    """Loads map and drone data, draws the scene, and runs the pygame loop."""
 
     def __init__(self) -> None:
         pygame.init()
         info = pygame.display.Info()
         self.WIDTH: int = info.current_w
         self.HEIGHT: int = info.current_h
-
         self.UI_SCALE: float = min(self.WIDTH / 1800.0, self.HEIGHT / 900.0)
 
         self.screen = pygame.display.set_mode(
@@ -137,12 +116,10 @@ class Game:
         self.drones: list[Drone] = []
         self.hubs_position: dict[str, tuple[float, float]] = {}
 
-        # Element sizes in pixels
         self.HUB_RADIUS: int = int(30 * self.UI_SCALE)
         self.DRONE_SIZE: int = int(24 * self.UI_SCALE)
         self.PADDING: int = max(self.HUB_RADIUS, self.DRONE_SIZE) + 20
 
-        # Map transform computed in _compute_scale()
         self.map_scale: float = 1.0
         self.offset_x: float = 0.0
         self.offset_y: float = 0.0
@@ -151,9 +128,8 @@ class Game:
         self.max_x: float = 0.0
         self.max_y: float = 0.0
 
-        # Simulation time
         self.current_turn: int = 0
-        self.frame_count: int = 0  # counts 0-59 within each turn
+        self.frame_count: int = 0
 
         self.bg = pygame.image.load(
             "images/congruent_pentagon.png"
@@ -186,8 +162,7 @@ class Game:
         self._compute_scale()
 
     def load_drones(self, drones: Any) -> None:
-        """Create Drone objects from simulation data
-        and place them at start."""
+        """Create Drone objects from simulation data and place at start."""
         for drone_data in drones:
             drone = Drone()
             drone.id = drone_data.id
@@ -217,7 +192,7 @@ class Game:
         self.max_y = max(c[1] for c in coords)
 
     def _compute_scale(self) -> None:
-        """Compute map_scale and offsets so all hubs fit inside screen."""
+        """Compute map_scale and offsets so all hubs fit inside the screen."""
         usable_w = self.WIDTH - 2 * self.PADDING
         usable_h = self.HEIGHT - 3 * self.PADDING
         range_x = self.max_x - self.min_x
@@ -230,9 +205,7 @@ class Game:
         elif range_y == 0:
             self.map_scale = usable_w / range_x
         else:
-            self.map_scale = min(
-                usable_w / range_x, usable_h / range_y
-            )
+            self.map_scale = min(usable_w / range_x, usable_h / range_y)
 
         self.offset_x = (
             self.PADDING
@@ -330,7 +303,7 @@ class Game:
             )
 
     def run(self) -> None:
-        """Start the simulation loop. Blocks until the window is closed."""
+        """Start the simulation loop; blocks until the window is closed."""
         while self.running:
             self.clock.tick(self.FPS)
 

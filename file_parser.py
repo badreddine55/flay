@@ -1,3 +1,9 @@
+"""Map file parser.
+
+Reads, validates, and returns a Graph of zones and connections.
+"""
+
+import os
 import sys
 from enum import Enum
 from typing import Generator, Optional
@@ -6,9 +12,7 @@ from typing import Generator, Optional
 class ParseError(Exception):
     """Raised when the map file contains a syntax or semantic error.
 
-    Attributes:
-        line_number: The 1-based line number where the error occurred.
-        cause:       A human-readable description of the problem.
+    Stores the 1-based line_number and a human-readable cause string.
     """
 
     def __init__(self, line_number: int, cause: str) -> None:
@@ -20,10 +24,7 @@ class ParseError(Exception):
 class ZoneType(Enum):
     """Movement cost and accessibility of a zone.
 
-    NORMAL:     Standard zone — costs 1 turn to enter.
-    BLOCKED:    Impassable — no drone may enter or pass through.
-    RESTRICTED: Sensitive zone — costs 2 turns to enter.
-    PRIORITY:   Preferred zone — costs 1 turn but favoured by pathfinding.
+    NORMAL=1 turn, BLOCKED=impassable, RESTRICTED=2 turns, PRIORITY=preferred.
     """
 
     NORMAL = "normal"
@@ -35,13 +36,7 @@ class ZoneType(Enum):
 class Zone:
     """A single node (hub) in the drone network.
 
-    Attributes:
-        name:        Unique identifier — no dashes or spaces allowed.
-        coordinates: (x, y) integer position on the map.
-        zone_type:   Movement cost / accessibility type.
-        color:       Optional single-word display colour.
-        max_drones:  Maximum drones that may occupy this zone at once.
-        role:        One of ``"hub"``, ``"start"``, or ``"end"``.
+    Holds its name, (x, y) coordinates, type, color, capacity, and role.
     """
 
     def __init__(
@@ -62,13 +57,7 @@ class Zone:
 
 
 class Connection:
-    """A bidirectional edge between two zones.
-
-    Attributes:
-        zone1:             Name of the first zone.
-        zone2:             Name of the second zone.
-        max_link_capacity: Maximum drones that may traverse this edge at once.
-    """
+    """A bidirectional edge between two zones with a max drone capacity."""
 
     def __init__(
         self,
@@ -84,12 +73,7 @@ class Connection:
 class Graph:
     """Complete in-memory representation of a parsed drone network.
 
-    Attributes:
-        nb_drones:   Total drones that must travel start → end.
-        zones:       Mapping of zone name → Zone (includes start and end).
-        connections: All edges in the network.
-        start:       The unique departure zone.
-        end:         The unique destination zone.
+    Holds the drone count, all zones, all connections, and the start/end zones.
     """
 
     def __init__(
@@ -108,15 +92,7 @@ class Graph:
 
 
 class Parser:
-    """Reads and validates a .map file, producing a Graph object.
-
-    Usage::
-
-        graph = Parser("maps/example.map").parse()
-
-    Attributes:
-        file_path: Path to the .map file supplied at construction time.
-    """
+    """Reads and validates a .map file, producing a Graph object."""
 
     def __init__(self, file_path: str) -> None:
         self.file_path = file_path
@@ -124,9 +100,8 @@ class Parser:
     def parse(self) -> Graph:
         """Parse the file and return a validated Graph.
 
-        Raises:
-            ParseError:        On any syntax or semantic problem in the file.
-            FileNotFoundError: If the file path does not exist.
+        Raises ParseError on any syntax or semantic problem, or
+        FileNotFoundError if the path does not exist.
         """
         zones: dict[str, Zone] = {}
         connections: list[Connection] = []
@@ -139,11 +114,10 @@ class Parser:
         for line_number, raw_line in self._read_lines():
             line = raw_line.strip()
 
-            # Skip blanks and comments.
             if not line or line.startswith("#"):
                 continue
-
-            # The very first meaningful line must declare nb_drones.
+            if "#" in line:
+                line = line.split("#")[0]
             if not nb_drones_parsed:
                 nb_drones = self._parse_nb_drones(line, line_number)
                 nb_drones_parsed = True
@@ -192,7 +166,6 @@ class Parser:
                 f"start_hub max_drones ({start_zone.max_drones}) is less than "
                 f"nb_drones ({nb_drones}) not all drones can occupy the start",
             )
-
         if end_zone.max_drones < nb_drones:
             raise ParseError(
                 0,
@@ -218,14 +191,14 @@ class Parser:
     def _register_zone(
         self, zone: Zone, zones: dict[str, Zone], line_number: int
     ) -> None:
-        """Add *zone* to *zones*, raising ParseError on duplicate names."""
+        """Add zone to zones, raising ParseError on duplicate names."""
         if zone.name in zones:
             raise ParseError(
                 line_number, f"duplicate zone name {zone.name!r}")
         zones[zone.name] = zone
 
     def _parse_nb_drones(self, line: str, line_number: int) -> int:
-        """Parse ``nb_drones: <positive int>`` and return the integer value."""
+        """Parse nb_drones: <positive int> and return the integer value."""
         if not line.startswith("nb_drones:"):
             raise ParseError(
                 line_number,
@@ -246,7 +219,6 @@ class Parser:
             default_max_drones: int = 1) -> Zone:
         """Parse a hub/start_hub/end_hub line and return a Zone."""
         value = line[len(prefix):].strip()
-        # Split into at most 4 parts: name, x, y, optional metadata block.
         parts = value.split(maxsplit=3)
 
         if len(parts) < 3:
@@ -281,7 +253,7 @@ class Parser:
         )
 
     def _validate_zone_name(self, name: str, line_number: int) -> None:
-        """Raise ParseError if *name* contains forbidden characters."""
+        """Raise ParseError if name contains dashes or spaces."""
         if "-" in name:
             raise ParseError(
                 line_number,
@@ -298,9 +270,9 @@ class Parser:
         self, raw: Optional[str], line_number: int,
         default_max_drones: int = 1
     ) -> tuple[ZoneType, Optional[str], int]:
-        """Parse an optional ``[key=value ...]`` metadata block.
+        """Parse an optional [key=value ...] metadata block.
 
-        Returns zone_type, color, max_drones with defaults for omitted keys.
+        Returns (zone_type, color, max_drones) with defaults for omitted keys.
         """
         zone_type = ZoneType.NORMAL
         color: Optional[str] = None
@@ -372,7 +344,7 @@ class Parser:
         seen: set[tuple[str, str]],
         line_number: int,
     ) -> Connection:
-        """Parse a ``connection:`` line and return a Connection."""
+        """Parse a connection: line and return a Connection object."""
         value = line.split(":", 1)[1].strip()
         parts = value.split(maxsplit=1)
 
@@ -392,7 +364,6 @@ class Parser:
 
         zone1_name, zone2_name = zone_pair
 
-        # Self-loops are meaningless in this routing context.
         if zone1_name == zone2_name:
             raise ParseError(
                 line_number,
@@ -452,7 +423,7 @@ class Parser:
     ) -> None:
         """BFS from start — raise ParseError if end is not reachable.
 
-        BLOCKED zones are treated as impassable and excluded from traversal.
+        BLOCKED zones are excluded from traversal entirely.
         """
         adjacency: dict[str, set[str]] = {
             name: set()
@@ -491,8 +462,12 @@ class Parser:
 
 
 def get_file_path() -> str:
-    """Return the map file path from sys.argv, or exit with usage message."""
+    """Return the map file path from sys.argv, or exit with a usage message."""
     if len(sys.argv) != 2:
         print("Usage: python3 main.py <map_file_path>")
         sys.exit(1)
-    return sys.argv[1]
+    path = sys.argv[1]
+    if os.path.isdir(path):
+        print(f"Error: {path!r} is a directory, not a file.")
+        sys.exit(1)
+    return path
