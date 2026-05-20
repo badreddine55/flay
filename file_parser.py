@@ -275,7 +275,7 @@ class Parser:
         Returns (zone_type, color, max_drones) with defaults for omitted keys.
         """
         zone_type = ZoneType.NORMAL
-        color: Optional[str] = None
+        color: Optional[str] = "grey"
         max_drones = default_max_drones
 
         if raw is None:
@@ -461,13 +461,16 @@ class Parser:
         )
 
 
-def get_file_path() -> str:
-    """Return the map file path from sys.argv, or exit with a usage message."""
-    if len(sys.argv) != 2:
-        print("Usage: python3 main.py <map_file_path>")
-        sys.exit(1)
-    path = sys.argv[1]
-    if os.path.isdir(path):
-        print(f"Error: {path!r} is a directory, not a file.")
-        sys.exit(1)
-    return path
+class FilePathResolver:
+    @staticmethod
+    def get_file_path() -> str:
+        """Return the map file path from sys.argv,
+        or exit with a usage message."""
+        if len(sys.argv) != 2:
+            print("Usage: python3 main.py <map_file_path>")
+            sys.exit(1)
+        path = sys.argv[1]
+        if os.path.isdir(path):
+            print(f"Error: {path!r} is a directory, not a file.")
+            sys.exit(1)
+        return path

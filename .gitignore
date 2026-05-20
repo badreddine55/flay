@@ -3,7 +3,8 @@ __pycache__/
  
 # Mypy
 .mypy_cache/
- 
+# maps folder
+/maps
 # Virtual environments
 .env/
 

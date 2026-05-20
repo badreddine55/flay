@@ -329,6 +329,8 @@ class Game:
 
         Falls back to black for the special value 'rainbow'.
         """
-        resolved = "black" if color_name == "rainbow" else color_name
-        c = pygame.Color(resolved)
+        try:
+            c = pygame.Color(color_name)
+        except ValueError:
+            c = pygame.Color('grey')
         return c.r, c.g, c.b

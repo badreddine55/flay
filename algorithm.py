@@ -138,29 +138,37 @@ class Dijkstra:
 
         path = self._reconstruct_path(prev, turns, start, end)
 
-        for zone, turn, state in path:
+        for i in range(len(path)):
+            zone, turn, state = path[i]
+
+            if (i + 1 < len(path) and turn < path[i + 1][1] - 1):
+                for x in range(1, path[i + 1][1] - turn + 1):
+                    key = (zone, turn + x)
+                    self.hub_cache[key] = self.hub_cache.get(key, 0) + 1
+
             if state == "zone":
                 key = (zone, turn)
                 self.hub_cache[key] = self.hub_cache.get(key, 0) + 1
 
         for i in range(len(path) - 1):
-            zone_a, _, state_a = path[i]
-            _, turn_b, state_b = path[i + 1]
+            zone_a, turn_a, state_a = path[i]
+            zone_b, turn_b, state_b = path[i + 1]
 
-            if state_a == "transit" or state_b == "transit":
+            if state_b == "transit":
+                zone_b = zone_b.split("-")[1]
+                link_key = (min(zone_a, zone_b), max(zone_a, zone_b), turn_b)
+                self.link_cache[link_key] = (
+                    self.link_cache.get(link_key, 0) + 1
+                )
                 continue
 
-            departure_turn = turn_b - 1
-            zone_b = path[i + 1][0]
+            if state_a == "transit":
+                zone_a = zone_a.split("-")[0]
 
+            departure_turn = turn_b - 1
             link_key = (
-                min(zone_a, zone_b),
-                max(zone_a, zone_b),
-                departure_turn,
-            )
-            self.link_cache[link_key] = (
-                self.link_cache.get(link_key, 0) + 1
-            )
+                min(zone_a, zone_b), max(zone_a, zone_b), departure_turn)
+            self.link_cache[link_key] = self.link_cache.get(link_key, 0) + 1
 
         return path
 

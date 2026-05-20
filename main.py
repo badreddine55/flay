@@ -1,19 +1,12 @@
-"""Entry point for the drone delivery simulation.
-
-Parses the map file, builds the routing graph, computes an optimal path for
-each drone via Dijkstra, runs the turn-based simulation, and launches the
-pygame visualiser.
-"""
-
 import sys
-from file_parser import get_file_path, Parser, ParseError
+from file_parser import FilePathResolver, Parser, ParseError
 from utils import AdjacencyList
 from algorithm import Drone, Dijkstra, Simulation
 from graphics import Game
 
 
 if __name__ == "__main__":
-    path = get_file_path()
+    path = FilePathResolver.get_file_path()
 
     try:
         parsed_data = Parser(path).parse()
